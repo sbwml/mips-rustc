@@ -57,4 +57,4 @@ jobs:
           tag: ${{ env.latest_release }}
           token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: |
-            ${{ matrix.target }}-rustc-$version.tar.xz
+            ${{ matrix.target }}-rustc-${{ env.latest_release }}.tar.xz
