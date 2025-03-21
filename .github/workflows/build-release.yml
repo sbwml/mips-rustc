@@ -1,0 +1,60 @@
+name: Build Releases
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 0 * * *
+
+permissions:
+  contents: write
+
+jobs:
+  build-cross:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - mips
+          - mipsel
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.target }}" = "mips" ]; then
+            wget -q https://mirror-03.infra.openwrt.org/releases/24.10-SNAPSHOT/targets/ath79/generic/openwrt-sdk-24.10-SNAPSHOT-ath79-generic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+          else
+            wget -q https://mirror-03.infra.openwrt.org/releases/24.10-SNAPSHOT/targets/ramips/mt7621/openwrt-sdk-24.10-SNAPSHOT-ramips-mt7621_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+          fi
+          tar --use-compress-program=unzstd -xf *Linux-x86_64.tar.zst && rm -rf *Linux-x86_64.tar.zst
+          mv openwrt-sdk* build
+          cd build
+          version=$(curl -s "https://api.github.com/repos/rust-lang/rust/tags" | grep name | grep -v release | head -1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//;s/ //;s/v//')
+          echo "latest_release=$version" >>$GITHUB_ENV
+          ./scripts/feeds update -a || true
+          ./scripts/feeds install -a || true
+          sed -ri "s/(PKG_VERSION:=)[^\"]*/\1$version/" feeds/packages/lang/rust/Makefile
+          sed -ri "s/(PKG_HASH:=)[^\"]*/\1skip/" feeds/packages/lang/rust/Makefile
+          make defconfig || true
+          make package/feeds/packages/rust/host/compile V=s -j$(($(nproc) + 1)) || true
+          if [ "${{ matrix.target }}" = "mips" ]; then
+            cp -a staging_dir/target-mips_24kc_musl/host ../mips-rustc-$version
+          else
+            cp -a staging_dir/target-mipsel_24kc_musl/host ../mipsel-rustc-$version
+          fi
+          cd ..
+          tar Jcf ${{ matrix.target }}-rustc-$version.tar.xz ${{ matrix.target }}-rustc-$version
+
+      - name: Create release
+        continue-on-error: true
+        uses: ncipollo/release-action@v1
+        with:
+          name: ${{ env.latest_release }}
+          allowUpdates: true
+          replacesArtifacts: true
+          commit: main
+          tag: ${{ env.latest_release }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: |
+            ${{ matrix.target }}-rustc-$version.tar.xz
