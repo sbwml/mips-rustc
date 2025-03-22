@@ -20,7 +20,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if latest tag exists
+        id: check-tag
+        run: |
+          version=$(curl -s "https://api.github.com/repos/rust-lang/rust/tags" | grep name | grep -v release | head -1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//;s/ //;s/v//')
+          echo "latest_release=$version" >>$GITHUB_ENV
+          if git ls-remote --tags origin | grep -q "refs/tags/$version"; then
+            echo "::set-output name=skip::true"
+          else
+            echo "::set-output name=skip::false"
+          fi
+
       - name: Build ${{ matrix.target }}
+        if: steps.check-tag.outputs.skip == 'false'
         run: |
           if [ "${{ matrix.target }}" = "mips" ]; then
             wget -q https://mirror-03.infra.openwrt.org/releases/24.10-SNAPSHOT/targets/ath79/generic/openwrt-sdk-24.10-SNAPSHOT-ath79-generic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
@@ -30,23 +42,22 @@ jobs:
           tar --use-compress-program=unzstd -xf *Linux-x86_64.tar.zst && rm -rf *Linux-x86_64.tar.zst
           mv openwrt-sdk* build
           cd build
-          version=$(curl -s "https://api.github.com/repos/rust-lang/rust/tags" | grep name | grep -v release | head -1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//;s/ //;s/v//')
-          echo "latest_release=$version" >>$GITHUB_ENV
           ./scripts/feeds update -a || true
           ./scripts/feeds install -a || true
-          sed -ri "s/(PKG_VERSION:=)[^\"]*/\1$version/" feeds/packages/lang/rust/Makefile
+          sed -ri "s/(PKG_VERSION:=)[^\"]*/\1$latest_release/" feeds/packages/lang/rust/Makefile
           sed -ri "s/(PKG_HASH:=)[^\"]*/\1skip/" feeds/packages/lang/rust/Makefile
           make defconfig || true
           make package/feeds/packages/rust/host/compile V=s -j$(($(nproc) + 1)) || true
           if [ "${{ matrix.target }}" = "mips" ]; then
-            cp -a staging_dir/target-mips_24kc_musl/host ../mips-rustc-$version
+            cp -a staging_dir/target-mips_24kc_musl/host ../mips-rustc-$latest_release
           else
-            cp -a staging_dir/target-mipsel_24kc_musl/host ../mipsel-rustc-$version
+            cp -a staging_dir/target-mipsel_24kc_musl/host ../mipsel-rustc-$latest_release
           fi
           cd ..
-          tar Jcf ${{ matrix.target }}-rustc-$version.tar.xz ${{ matrix.target }}-rustc-$version
+          tar Jcf ${{ matrix.target }}-rustc-$latest_release.tar.xz ${{ matrix.target }}-rustc-$latest_release
 
       - name: Create release
+        if: steps.check-tag.outputs.skip == 'false'
         continue-on-error: true
         uses: ncipollo/release-action@v1
         with:
