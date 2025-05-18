@@ -47,6 +47,7 @@ jobs:
           sed -ri "s/(PKG_VERSION:=)[^\"]*/\1$latest_release/" feeds/packages/lang/rust/Makefile
           sed -ri "s/(PKG_HASH:=)[^\"]*/\1skip/" feeds/packages/lang/rust/Makefile
           sed -i "s/config.toml/bootstrap.toml/g" feeds/packages/lang/rust/Makefile
+          sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=if-unchanged/g' feeds/packages/lang/rust/Makefile
           make defconfig || true
           make package/feeds/packages/rust/host/compile V=s -j$(($(nproc) + 1)) || true
           if [ "${{ matrix.target }}" = "mips" ]; then
