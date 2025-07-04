@@ -41,13 +41,17 @@ jobs:
           fi
           tar --use-compress-program=unzstd -xf *Linux-x86_64.tar.zst && rm -rf *Linux-x86_64.tar.zst
           mv openwrt-sdk* build
+          git clone https://github.com/openwrt/packages --depth=1
+          mv packages/lang/rust ./
+          rm -rf packages
           cd build
           ./scripts/feeds update -a || true
           ./scripts/feeds install -a || true
+          rm -rf feeds/packages/lang/rust
+          mv ../rust feeds/packages/lang/rust
           sed -ri "s/(PKG_VERSION:=)[^\"]*/\1$latest_release/" feeds/packages/lang/rust/Makefile
           sed -ri "s/(PKG_HASH:=)[^\"]*/\1skip/" feeds/packages/lang/rust/Makefile
-          sed -i "s/config.toml/bootstrap.toml/g" feeds/packages/lang/rust/Makefile
-          sed -i '/llvm\.download-ci-llvm/d' feeds/packages/lang/rust/Makefile
+          sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/g' feeds/packages/lang/rust/Makefile
           make defconfig || true
           make package/feeds/packages/rust/host/compile V=s -j$(($(nproc) + 1)) || true
           if [ "${{ matrix.target }}" = "mips" ]; then
