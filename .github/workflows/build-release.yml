@@ -18,7 +18,8 @@ jobs:
           - mipsel
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Free disk space
+        uses: sbwml/actions@free-disk
 
       - name: Check if latest tag exists
         id: check-tag
