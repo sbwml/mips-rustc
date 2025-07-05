@@ -18,9 +18,6 @@ jobs:
           - mipsel
 
     steps:
-      - name: Free disk space
-        uses: sbwml/actions@free-disk
-
       - name: Check if latest tag exists
         id: check-tag
         run: |
@@ -31,6 +28,14 @@ jobs:
           else
             echo "::set-output name=skip::false"
           fi
+
+      - name: Free disk space
+        if: steps.check-tag.outputs.skip == 'false'
+        uses: sbwml/actions@free-disk
+
+      - name: Build System Setup
+        if: steps.check-tag.outputs.skip == 'false'
+        uses: sbwml/actions@openwrt-build-setup
 
       - name: Build ${{ matrix.target }}
         if: steps.check-tag.outputs.skip == 'false'
